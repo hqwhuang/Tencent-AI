@@ -19,7 +19,7 @@ def gen_tfrecord(argv):
     age_ratio = ['age_ratio{}'.format(i) for i in range(1,11)] 
     gender_ratio = ['gender_ratio{}'.format(i) for i in range(1,3)] 
 
-    features_int64 = age_stat + gender_stat
+    features_int64 = age_stat + gender_stat + ["pv"]
     features_float =  age_ratio + gender_ratio
 
 
@@ -39,7 +39,7 @@ def gen_tfrecord(argv):
     result = {
         f: [] for f in features
     }
-    for j in range(1,122):
+    for j in range(56,57):
         ds = tf.data.TFRecordDataset(["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(j)], 'GZIP', 1024*1024*1024)
         ds = ds.batch(128)
         ds = ds.map(_parse)
