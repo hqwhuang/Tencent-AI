@@ -266,10 +266,6 @@ def main(argv):
             ),
             hooks=[]
         )
-    summary_writer = SummaryWriterCache.get(args.model_dir)
-    summary_writer.flush()
-    summary_writer.add_session_log(SessionLog(status=SessionLog.STOP))
-    summary_writer.close()
     
     tf.logging.info("Finish train and evaluate")
     classifier.export_saved_model(args.save_dir, tf.estimator.export.build_raw_serving_input_receiver_fn(features=feature_spec))
