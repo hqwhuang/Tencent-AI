@@ -52,6 +52,7 @@ def main(argv):
         pred = np.concatenate((pred, res))
     with open("/cos_person/output/result.txt", "r") as f:
         f.write("{}".format(pred))
+        f.write("\n{}".format(tf.argmax(pred,1)))
         f.write("\n{}".format(uids))
 
 if __name__ == '__main__':
