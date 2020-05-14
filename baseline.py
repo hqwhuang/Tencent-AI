@@ -175,6 +175,10 @@ def main(argv):
         f.export_feature(feature_spec)
 
     classifier = get_classifier()
+    summary_hook = tf.train.SummarySaverHook(
+                    100,
+                    output_dir='/cos_person/training_output/tb_baseline',
+                    scaffold=tf.train.Scaffold(summary_op=tf.summary.merge_all()))
 
     whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
     training_list_list = []
