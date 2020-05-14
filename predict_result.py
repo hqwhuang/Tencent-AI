@@ -52,7 +52,8 @@ def main(argv):
         pred = np.concatenate((pred, res))
     with open("/cos_person/output/result.txt", "r") as f:
         f.write("{}".format(pred))
-        f.write("\n{}".format(tf.argmax(pred,1)))
+        value = tf.argmax(pred,1) if args.target == "age" else tf.cast(pred > 0.5, tf.int64)+1
+        f.write("\n{}".format(value))
         f.write("\n{}".format(uids))
 
 if __name__ == '__main__':

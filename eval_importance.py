@@ -61,7 +61,7 @@ def main(argv):
             res = model_pred_fn(feature_dict)['{}/logistic'.format(args.target)].flatten()
             pred = np.concatenate((pred, res))
 
-        matches = tf.equal(tf.argmax(pred,1), truth)   
+        matches = tf.equal(tf.argmax(pred,1), truth) if args.target == "age" else tf.equal(pred > 0.5, truth)
         accuracy[current_feature.feature_name] = tf.reduce_mean(tf.cast(matches, tf.float32))
         print("Shuffling feature {} got accuracy {:.4f}".format(current_feature.feature_name, accuracy[current_feature.feature_name]))
     print("Result:")
