@@ -2,13 +2,24 @@
 import argparse
 import tensorflow as tf
 from feature import feature_set
+import os, sys
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_index', type=int,
                     help='input file')
-# parser.add_argument('--export_dir', type=str,
-#                     help='path to export the tfrecord training data')
+
+
+class Unbuffered(object):
+    def __init__(self, stream):
+        self.stream = stream
+    def write(self, data):
+        self.stream.write(data)
+        self.stream.flush()
+    def __getattr__(self, attr):
+        return getattr(self.stream, attr)
+
+sys.stdout = Unbuffered(sys.stdout)
 
 
 def test_tfrecord(argv):
@@ -42,6 +53,7 @@ def test_tfrecord(argv):
     ds = ds.batch(2)
     ds = ds.map(_parse)
     cnt = 0
+    print(tf.__version__)
     for read_data, labels in ds.take(1):
         print(read_data)
         print(labels)

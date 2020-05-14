@@ -5,15 +5,28 @@ from feature import feature_set, _Feature
 import argparse
 import math
 import numpy as np
+import os, sys
 
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_baseline/1589262665", help="model path")
+parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_baseline/1589421800", help="model path")
 parser.add_argument('--last_file', type=int, default=2)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument("--batch_num", type=int, default=100, help="how many batch you want to evaluate")
 parser.add_argument("--target", type=str, default="age", help="target")
+
+
+class Unbuffered(object):
+    def __init__(self, stream):
+        self.stream = stream
+    def write(self, data):
+        self.stream.write(data)
+        self.stream.flush()
+    def __getattr__(self, attr):
+        return getattr(self.stream, attr)
+
+sys.stdout = Unbuffered(sys.stdout)
 
 
 def main(argv):
@@ -41,7 +54,7 @@ def main(argv):
 
     NOT_EXIST = _Feature("NOT_EXIST")
     model_pred_fn = from_saved_model(args.model_path, 'predict')
-    whole_training_list = ["/cos_person/train_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
+    whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
     accuracy = {}
     for current_feature in [NOT_EXIST] + feature_set:
         ds = tf.data.TFRecordDataset(whole_training_list, "GZIP", 1024)
@@ -50,7 +63,7 @@ def main(argv):
         ds = ds.prefetch(1)
         truth, pred, uids = np.array([]), np.array([]), np.array([])
         for feature_dict, label_tensor in ds.take(args.batch_num):
-            truth = np.concatenate(truth, label_tensor[args.target].numpy())
+            truth = np.concatenate((truth, label_tensor[args.target].numpy()))
             uids = np.concatenate((uids, feature_dict['user_id'].numpy()))
             for f in feature_dict:
                 if f == current_feature.feature_name:
@@ -58,10 +71,10 @@ def main(argv):
                 else:
                     feature_dict[f] = tf.reshape(feature_dict[f], [-1,1]).numpy()
 
-            res = model_pred_fn(feature_dict)['{}/logistic'.format(args.target)].flatten()
+            res = model_pred_fn(feature_dict)['{}/class_ids'.format(args.target)].flatten()
             pred = np.concatenate((pred, res))
 
-        matches = tf.equal(tf.argmax(pred,1), truth) if args.target == "age" else tf.equal(pred > 0.5, truth)
+        matches = tf.equal(pred, tf.cast(truth, tf.int64))
         accuracy[current_feature.feature_name] = tf.reduce_mean(tf.cast(matches, tf.float32))
         print("Shuffling feature {} got accuracy {:.4f}".format(current_feature.feature_name, accuracy[current_feature.feature_name]))
     print("Result:")

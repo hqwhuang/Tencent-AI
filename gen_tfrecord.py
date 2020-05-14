@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*- 
 import argparse
 import tensorflow as tf
+import os, sys
 
 parser = argparse.ArgumentParser()
-# parser.add_argument('--input_file', type=str,
-#                     help='input file')
-# parser.add_argument('--export_dir', type=str,
-#                     help='path to export the tfrecord training data')
+
+
+class Unbuffered(object):
+    def __init__(self, stream):
+        self.stream = stream
+    def write(self, data):
+        self.stream.write(data)
+        self.stream.flush()
+    def __getattr__(self, attr):
+        return getattr(self.stream, attr)
+
+sys.stdout = Unbuffered(sys.stdout)
 
 
 def gen_tfrecord(argv):
