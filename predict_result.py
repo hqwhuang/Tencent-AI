@@ -10,7 +10,7 @@ import os, sys
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_baseline/1589421800", help="model path")
+parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_baseline0.005/1589538161", help="model path")
 parser.add_argument('--last_file', type=int, default=2)
 parser.add_argument('--batch_size', type=int, default=128)
 
@@ -51,8 +51,8 @@ def main(argv):
     args = parser.parse_args(argv[1:])
 
     model_pred_fn = from_saved_model(args.model_path, 'predict')
-    # whole_training_list = ["/cos_person/test_data_tfrecord/test_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
-    whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
+    whole_training_list = ["/cos_person/testing_data_tfrecord/test_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
+    # whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
     ds = tf.data.TFRecordDataset(whole_training_list, "GZIP", 1024)
     ds = ds.batch(args.batch_size)
     ds = ds.map(parse, num_parallel_calls=10)
