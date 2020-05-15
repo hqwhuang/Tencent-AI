@@ -20,6 +20,7 @@ parser.add_argument('--save_dir', type=str, default="/cos_person/training_output
 parser.add_argument('--per_file', type=int, default=12)
 parser.add_argument('--last_file', type=int, default=2) #121
 parser.add_argument("--hidden_layers", type=str, default="128,64")
+parser.add_argument("--learning_rate", type=float, default=0.05)
 
 TEMP = "temp/"
 
@@ -108,7 +109,7 @@ def main(argv):
 
             logits = dense_logits + global_bias
         
-        deep_optimizer = tf.train.AdagradOptimizer(learning_rate=0.05)
+        deep_optimizer = tf.train.AdagradOptimizer(learning_rate=args.learning_rate)
 
 
         def _train_op_fn(loss):
@@ -178,11 +179,12 @@ def main(argv):
 
         classifier = tf.estimator.Estimator(
             model_fn=model_fn,
-            model_dir=TEMP+args.model_name,
+            model_dir=TEMP+args.model_name+str(args.learning_rate),
             params={
                 'feature_columns': feature_columns,
                 'hidden_layers': [int(x.strip()) for x in args.hidden_layers.strip().split(",")]
-            }
+            },
+            config=tf.estimator.RunConfig(keep_checkpoint_max=2)
         )
         return classifier
     
@@ -235,9 +237,9 @@ def main(argv):
         )
     
     tf.logging.info("Finish train and evaluate")
-    classifier.export_saved_model(args.save_dir, tf.estimator.export.build_raw_serving_input_receiver_fn(features=feature_spec))
+    classifier.export_saved_model(args.save_dir+str(args.learning_rate), tf.estimator.export.build_raw_serving_input_receiver_fn(features=feature_spec))
     tf.logging.info("Finish export model")
-    out_bytes = subprocess.check_output(['cp', '-r', TEMP+args.model_name, args.model_dir])
+    out_bytes = subprocess.check_output(['cp', '-r', TEMP+args.model_name+str(args.learning_rate), args.model_dir+args.model_name+"/"+str(args.learning_rate)])
     tf.logging.info("Finish copy model_dir")
 
 
