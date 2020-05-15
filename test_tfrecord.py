@@ -3,6 +3,7 @@ import argparse
 import tensorflow as tf
 from feature import feature_set
 import os, sys
+import subprocess
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
@@ -58,6 +59,15 @@ def test_tfrecord(argv):
         print(read_data)
         print(labels)
 
+
+def test_local_path(argv):
+    out_bytes = subprocess.check_output(['mkdir', 'who'])#, shell=True
+    out_bytes = subprocess.check_output(['cp', '-r', 'who', '/cos_person'])#, shell=True
+    
+    output = out_bytes.decode('utf-8')
+    print("result: {}".format(output))
+
+
 if __name__ == '__main__':
     tf.logging.set_verbosity(tf.logging.INFO)
-    tf.app.run(test_tfrecord)
+    tf.app.run(test_local_path)

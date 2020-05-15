@@ -9,16 +9,19 @@ from tensorflow.contrib.layers import sparse_column_with_integerized_feature, \
 from feature import feature_set
 import argparse
 import math
-import os, sys
+import os, sys, subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--epoch', type=int, default=1)
-parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/model_baseline")
+parser.add_argument('--model_name', type=str, default="model_baseline")
+parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/")
 parser.add_argument('--save_dir', type=str, default="/cos_person/training_output/save_baseline")
 parser.add_argument('--per_file', type=int, default=12)
-parser.add_argument('--last_file', type=int, default=2)
+parser.add_argument('--last_file', type=int, default=2) #121
 parser.add_argument("--hidden_layers", type=str, default="128,64")
+
+TEMP = "temp/"
 
 
 class Unbuffered(object):
@@ -175,7 +178,7 @@ def main(argv):
 
         classifier = tf.estimator.Estimator(
             model_fn=model_fn,
-            model_dir=args.model_dir,
+            model_dir=TEMP+args.model_name,
             params={
                 'feature_columns': feature_columns,
                 'hidden_layers': [int(x.strip()) for x in args.hidden_layers.strip().split(",")]
@@ -190,42 +193,6 @@ def main(argv):
         f.export_feature(feature_spec)
 
     classifier = get_classifier()
-
-
-    class SummarySaverHookNoCache(tf.train.SummarySaverHook):
-        def after_run(self, run_context, run_values):
-            _ = run_context
-            if not self._summary_writer:
-                return
-
-            stale_global_step = run_values.results["global_step"]
-            global_step = stale_global_step + 1
-            if self._next_step is None or self._request_summary:
-                global_step = run_context.session.run(self._global_step_tensor)
-
-            if self._next_step is None:
-                self._summary_writer.add_session_log(
-                    SessionLog(status=SessionLog.START), global_step)
-
-            if self._request_summary:
-                self._timer.update_last_triggered_step(global_step)
-            if "summary" in run_values.results:
-                for summary in run_values.results["summary"]:
-                    self._summary_writer.add_summary(summary, global_step)
-            self._next_step = global_step + 1
-            self._summary_writer.flush()
-
-        def end(self, session=None):
-            if self._summary_writer:
-                self._summary_writer.flush()
-                self._summary_writer.close()
-
-
-    summary_hook = SummarySaverHookNoCache(
-                    100,
-                    output_dir='/cos_person/training_output/tb_baseline',
-                    scaffold=tf.train.Scaffold(summary_op=tf.summary.merge_all()))
-    
 
     whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
     training_list_list = []
@@ -270,7 +237,8 @@ def main(argv):
     tf.logging.info("Finish train and evaluate")
     classifier.export_saved_model(args.save_dir, tf.estimator.export.build_raw_serving_input_receiver_fn(features=feature_spec))
     tf.logging.info("Finish export model")
-
+    out_bytes = subprocess.check_output(['cp', '-r', TEMP+args.model_name, args.model_dir])
+    tf.logging.info("Finish copy model_dir")
 
 
 if __name__ == '__main__':
