@@ -382,15 +382,21 @@ void gen_result() {
     cout<<endl;
     for(int i = 1; i < 136; i++) {
         cout<<"*"<<std::flush;
-        ifstream input("/Users/huangqingwei/Documents/comp/tencentAD/predict/result_" + to_string(i) + ".txt");
-        getline(input, line);
-        while(getline(input, line)) {
+        ifstream input_gender("/Users/huangqingwei/Documents/cos/predict_gender/result_" + to_string(i) + ".txt");
+        getline(input_gender, line);
+        while(getline(input_gender, line)) {
             sscanf(line.c_str(), "%d,%d,%d", &uid, &age, &gender);
-            user_age[uid][age]++;
             user_gender[uid][gender]++;
+            user_age[uid][age]++;
         }
+        // ifstream input_age("/Users/huangqingwei/Documents/cos/predict_age/result_" + to_string(i) + ".txt");
+        // getline(input_age, line);
+        // while(getline(input_age, line)) {
+        //     sscanf(line.c_str(), "%d,%d,%d", &uid, &age, &gender);
+        //     user_age[uid][age]++;
+        // }
     }
-    ofstream output("/Users/huangqingwei/Documents/comp/tencentAD/submission.csv");
+    ofstream output("/Users/huangqingwei/Documents/cos/submission.csv");
     output<<"user_id,predicted_age,predicted_gender"<<'\n';
     for (auto v : user_age) {
         output<<v.first<<','<<get_most(user_age[v.first])<<','<<get_most(user_gender[v.first])<<'\n';

@@ -11,7 +11,7 @@ import threading
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_sequence0.1/1589716454", help="model path")
+parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_sequence1/1589715334", help="model path")
 parser.add_argument('--left_file', type=int, default=1)
 parser.add_argument('--right_file', type=int, default=24)
 parser.add_argument('--batch_size', type=int, default=128)
