@@ -2,9 +2,11 @@
 import argparse
 import tensorflow as tf
 import os, sys
+import threading
 
 parser = argparse.ArgumentParser()
-
+parser.add_argument('--left_file', type=int, default=1)
+parser.add_argument('--right_file', type=int, default=24)
 
 class Unbuffered(object):
     def __init__(self, stream):
@@ -18,31 +20,36 @@ class Unbuffered(object):
 sys.stdout = Unbuffered(sys.stdout)
 
 
+def run(index, args):
+    with open("/cos_person/testing_data_v2/test_serialize_{}.csv".format(index), "r") as f:
+        lines = f.readlines()
+        key = lines[0].strip().split(",")
+        key_float = key[:12]
+        key_int64 = key[12:]
+        values = lines[1:]
+        options = tf.python_io.TFRecordOptions(compression_type="GZIP", compression_level=9)
+        writer = tf.python_io.TFRecordWriter("/cos_person/testing_data_tfrecord_v2/test_tfrecord_{}.gz".format(index), options=options)
+        for line in values:
+            value_float = line.strip().split(",")[:12]
+            value_int64 = line.strip().split(",")[12:]
+            whole_feature = {
+                feature_name: tf.train.Feature(float_list=tf.train.FloatList(value=[float(value)])) for (feature_name, value) in list(zip(key_float, value_float))
+            }
+            whole_feature.update({
+                feature_name: tf.train.Feature(int64_list=tf.train.Int64List(value=[int(x) for x in value.split(":")])) for (feature_name, value) in list(zip(key_int64, value_int64))
+            })
+            tf_example = tf.train.Example(
+                features=tf.train.Features(feature=whole_feature)
+            )
+            writer.write(tf_example.SerializeToString())
+        writer.close()
+
+
 def gen_tfrecord(argv):
     args = parser.parse_args(argv[1:])
-    for i in range(1, 136):
-        with open("/cos_person/testing_data/test_serialize_{}.csv".format(i), "r") as f:
-            lines = f.readlines()
-            key = lines[0].strip().split(",")
-            key_float = key[:12]
-            key_int64 = key[12:]
-            values = lines[1:]
-            options = tf.python_io.TFRecordOptions(compression_type="GZIP", compression_level=9)
-            writer = tf.python_io.TFRecordWriter("/cos_person/testing_data_tfrecord/test_tfrecord_{}.gz".format(i), options=options)
-            for line in values:
-                value_float = line.strip().split(",")[:12]
-                value_int64 = line.strip().split(",")[12:]
-                whole_feature = {
-                    feature_name: tf.train.Feature(float_list=tf.train.FloatList(value=[float(value)])) for (feature_name, value) in list(zip(key_float, value_float))
-                }
-                whole_feature.update({
-                    feature_name: tf.train.Feature(int64_list=tf.train.Int64List(value=[int(x) for x in value.split(":")])) for (feature_name, value) in list(zip(key_int64, value_int64))
-                })
-                tf_example = tf.train.Example(
-                    features=tf.train.Features(feature=whole_feature)
-                )
-                writer.write(tf_example.SerializeToString())
-            writer.close()
+    for i in range(args.left_file, 1+args.right_file):
+        x = threading.Thread(target=run, args=(i, args))
+        x.start()
 
 
 if __name__ == '__main__':

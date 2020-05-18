@@ -14,14 +14,16 @@ import os, sys, subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--epoch', type=int, default=1)
-parser.add_argument('--model_name', type=str, default="baseline")
+parser.add_argument('--model_name', type=str, default="sequence")
 parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/model_")
 parser.add_argument('--save_dir', type=str, default="/cos_person/training_output/save_")
 parser.add_argument('--per_file', type=int, default=12)
 parser.add_argument('--last_file', type=int, default=2) #121
 parser.add_argument("--hidden_layers", type=str, default="128,64")
+parser.add_argument("--lr", type=float, default=0.1)
 
 TEMP = "temp/"
+CID_EMBEDDING_DIMENSION = 8
 
 
 class Unbuffered(object):
@@ -81,6 +83,22 @@ def main(argv):
             tf.contrib.estimator.multi_class_head(n_classes=10, name="age"),
             tf.contrib.estimator.binary_classification_head(name="gender")
         ])
+        temp = {'creative_id': features['creative_id']}
+        temp['rcid'] = tf.sparse.SparseTensor(features['rcid_indices'], features['rcid_values'], features['rcid_shape'])
+
+        with tf.variable_scope("fm"):
+            cid_rcid_feature_column = params['sequence_feature_columns'].pop('rcid')
+            cid_rcid_embedding = tf.feature_column.input_layer(temp, cid_rcid_feature_column)
+            cid_embedding, rcid_embedding = tf.split(cid_rcid_embedding, [CID_EMBEDDING_DIMENSION, CID_EMBEDDING_DIMENSION], axis=1)
+
+            rcid_up, rcid_bias = tf.split(rcid_embedding, [CID_EMBEDDING_DIMENSION-1, 1], axis=1)
+            cid_up, cid_bias = tf.split(cid_embedding, [CID_EMBEDDING_DIMENSION-1, 1], axis=1)
+
+            rcid_cid_cross = tf.reduce_sum(tf.multiply(rcid_up, cid_up), axis=1, keepdims=True)
+
+            fm_output = tf.add_n([rcid_cid_cross, rcid_bias, cid_bias])
+            tf.logging.info("fm_output shape={}".format(fm_output.shape))
+
 
         with tf.variable_scope("deep"):
             feature_columns = list(params['feature_columns'].keys())
@@ -104,16 +122,19 @@ def main(argv):
                 cnt += 1
                 layer_name= "dense_{}".format(cnt)
             
+            fm_logits = tf.layers.dense(fm_output, units=head.logits_dimension, activation=None, name="fm_logits")
             dense_logits = tf.layers.dense(net, units=head.logits_dimension, activation=None, name="dense_logit")
             global_bias = tf.get_variable(name="global_bias", shape=[head.logits_dimension], initializer=tf.constant_initializer(0.0))
 
-            logits = dense_logits + global_bias
+            logits = fm_logits + dense_logits + global_bias
         
         if is_training:
+            tf.summary.histogram("fm_output/rcid_cid_cross", rcid_cid_cross)
+            tf.summary.histogram("fm_output/linear_bias", rcid_bias + cid_bias)
             tf.summary.histogram("sample/gender", tf.cast(labels["gender"], tf.int32))
             tf.summary.histogram("sample/age", labels["age"])
         deep_optimizer = tf.train.AdagradOptimizer(learning_rate=0.005)
-
+        fm_optimizer = tf.train.FtrlOptimizer(learning_rate=args.lr) if args.model_name != "sequencev2" else tf.train.RMSPropOptimizer(learning_rate=0.0001)
 
         def _train_op_fn(loss):
             train_ops = []
@@ -121,6 +142,8 @@ def main(argv):
             train_ops.append(deep_optimizer.minimize(loss=loss, 
                                                     global_step=tf.train.get_global_step(),
                                                     var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="deep")))
+            train_ops.append(fm_optimizer.minimize(loss=loss, 
+                                                    var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="fm")))
             return control_flow_ops.group(*train_ops)
         
 
@@ -134,7 +157,7 @@ def main(argv):
 
     def get_classifier():
         feature_columns = {}
-
+        sequence_feature_columns = {}
 
         def _get_embedding_column(feature, dimension, bucket_size=10, dtype=tf.int64):
             categorical_column = sparse_column_with_integerized_feature(column_name=feature,
@@ -145,10 +168,21 @@ def main(argv):
 
         def _get_stat_column(feature, boundaries):
             feature_columns[feature] = indicator_column(bucketized_column(numeric_column(feature), boundaries))
+        
 
+        def _get_shared_sequence_column(feature1, feature2, bucket_size, dimension, combiner="sum"):
+            seq_categorical_column = sparse_column_with_integerized_feature(column_name=feature1,
+                                bucket_size=bucket_size)
+            categorical_column = sparse_column_with_integerized_feature(column_name=feature2,
+                                        bucket_size=bucket_size)
+            sequence_feature_columns[feature1] = shared_embedding_columns([seq_categorical_column, categorical_column], dimension=dimension,
+                                            combiner=combiner, initializer=tf.random_normal_initializer(stddev=1.0/math.sqrt(dimension)))
+
+
+        _get_shared_sequence_column("rcid", "creative_id", bucket_size=5000000, dimension=CID_EMBEDDING_DIMENSION, combiner="sum")
         _get_embedding_column("user_id", 8, bucket_size=1000000)
         _get_embedding_column("time", 3, bucket_size=7)
-        _get_embedding_column("creative_id", 8, bucket_size=5000000)
+        # _get_embedding_column("creative_id", 8, bucket_size=5000000)
         _get_embedding_column("ad_id", 8, bucket_size=4000000)
         _get_embedding_column("product_id", 8, bucket_size=100000)
         _get_embedding_column("product_category", 3, bucket_size=100)
@@ -185,6 +219,7 @@ def main(argv):
             model_dir=TEMP+args.model_name,
             params={
                 'feature_columns': feature_columns,
+                'sequence_feature_columns': sequence_feature_columns,
                 'hidden_layers': [int(x.strip()) for x in args.hidden_layers.strip().split(",")]
             },
             config=tf.estimator.RunConfig(keep_checkpoint_max=2)
@@ -199,7 +234,7 @@ def main(argv):
 
     classifier = get_classifier()
 
-    whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
+    whole_training_list = ["/cos_person/training_data_tfrecord_v2/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
     training_list_list = []
     for i in range(0, len(whole_training_list), args.per_file):
         training_list_list.append(whole_training_list[i:i+args.per_file])

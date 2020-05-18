@@ -48,7 +48,7 @@ def gen_tfrecord(argv):
     result = {
         f: [] for f in features
     }
-    for j in range(56,57):
+    for j in range(66,67):
         ds = tf.data.TFRecordDataset(["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(j)], 'GZIP', 1024*1024*1024)
         ds = ds.batch(128)
         ds = ds.map(_parse)

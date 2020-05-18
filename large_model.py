@@ -14,12 +14,13 @@ import os, sys, subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--epoch', type=int, default=1)
-parser.add_argument('--model_name', type=str, default="baseline")
+parser.add_argument('--model_name', type=str, default="large")
 parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/model_")
 parser.add_argument('--save_dir', type=str, default="/cos_person/training_output/save_")
 parser.add_argument('--per_file', type=int, default=12)
 parser.add_argument('--last_file', type=int, default=2) #121
 parser.add_argument("--hidden_layers", type=str, default="128,64")
+parser.add_argument("--l2", type=float, default=0.01)
 
 TEMP = "temp/"
 
@@ -38,16 +39,32 @@ sys.stdout = Unbuffered(sys.stdout)
 
 def main(argv):
     args = parser.parse_args(argv[1:])
-    label_weights = {
-        "age": 0.5,
-        "gender": 0.5
+    label_weights = { 
+        "age": [2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0],
+        "gender": [1.0, 10.0]
     }
+    if args.model_name == 'largev1':
+        label_weights = { 
+            "age": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "gender": [1.0, 2.0]
+        }
+    elif args.model_name == 'largev2':
+        label_weights = { 
+            "age": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "gender": [1.0, 3.0]
+        }
+    elif args.model_name == 'largev3':
+        label_weights = { 
+            "age": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "gender": [1.0, 4.0]
+        }
+    
     read_feature = {}
     for f in feature_set:
         f.input_feature(read_feature)
 
 
-    def parse(record):
+    def parse(record, table_age, table_gender):
         read_data = tf.parse_example(serialized=record,
                                     features=read_feature)
         for f in feature_set:
@@ -57,8 +74,8 @@ def main(argv):
             "age": read_data["age"] - 1,
             "gender": tf.math.equal(read_data["gender"], tf.fill(tf.shape(read_data["gender"]), tf.constant(2, tf.int64)))
         }
-        read_data["age_weight"] = tf.fill(tf.shape(read_data["age"]), 1.0)
-        read_data["gender_weight"] = tf.fill(tf.shape(read_data["gender"]), 1.0)
+        read_data["age_weight"] = table_age.lookup(read_data["age"])
+        read_data["gender_weight"] = table_gender.lookup(tf.cast(read_data["gender"], tf.int64))
         read_data.pop("gender")
         read_data.pop("age")
         return read_data, labels
@@ -66,9 +83,27 @@ def main(argv):
 
     def get_input_fn(filenames, epoch=1, batch_size=128, compression="GZIP"):
         def input_fn():
+            table_gender = tf.contrib.lookup.HashTable(
+                tf.contrib.lookup.KeyValueTensorInitializer(
+                    list(range(2)),
+                    label_weights["gender"],
+                    key_dtype=tf.int64,
+                    value_dtype=tf.float32,
+                ),
+                default_value=1.0
+            )
+            table_age = tf.contrib.lookup.HashTable(
+                tf.contrib.lookup.KeyValueTensorInitializer(
+                    list(range(10)),
+                    label_weights["age"],
+                    key_dtype=tf.int64,
+                    value_dtype=tf.float32,
+                ),
+                default_value=1.0
+            )
             ds = tf.data.TFRecordDataset(filenames, compression, 10*1024*1024*1024)
             ds = ds.repeat(epoch).batch(batch_size)
-            ds = ds.map(parse, num_parallel_calls=10)
+            ds = ds.map(lambda record: parse(record, table_age, table_gender), num_parallel_calls=10)
             ds = ds.prefetch(buffer_size=20)
             return ds
         return input_fn
@@ -78,8 +113,8 @@ def main(argv):
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
         weight_columns = {x: numeric_column(x+"_weight") for x in label_weights.keys()}
         head = tf.contrib.estimator.multi_head([
-            tf.contrib.estimator.multi_class_head(n_classes=10, name="age"),
-            tf.contrib.estimator.binary_classification_head(name="gender")
+            tf.contrib.estimator.multi_class_head(weight_column=weight_columns["age"], n_classes=10, name="age"),
+            tf.contrib.estimator.binary_classification_head(weight_column=weight_columns["gender"], name="gender")
         ])
 
         with tf.variable_scope("deep"):
@@ -94,7 +129,7 @@ def main(argv):
             cnt = 0
             layer_name = "dense"
             for units in params['hidden_layers']:
-                net = tf.layers.dense(net, units=units, activation=tf.nn.relu)
+                net = tf.layers.dense(net, units=units, activation=tf.nn.relu, kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=args.l2))
                 with tf.variable_scope(layer_name, reuse=True):
                     weights = tf.get_variable("kernel")
                     bias = tf.get_variable("bias")
@@ -117,8 +152,10 @@ def main(argv):
 
         def _train_op_fn(loss):
             train_ops = []
+            l2_loss = tf.losses.get_regularization_loss()
             tf.summary.scalar('loss', loss)
-            train_ops.append(deep_optimizer.minimize(loss=loss, 
+            tf.summary.scalar('loss/l2', l2_loss)
+            train_ops.append(deep_optimizer.minimize(loss=loss+l2_loss, 
                                                     global_step=tf.train.get_global_step(),
                                                     var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="deep")))
             return control_flow_ops.group(*train_ops)
@@ -151,9 +188,9 @@ def main(argv):
         _get_embedding_column("creative_id", 8, bucket_size=5000000)
         _get_embedding_column("ad_id", 8, bucket_size=4000000)
         _get_embedding_column("product_id", 8, bucket_size=100000)
-        _get_embedding_column("product_category", 3, bucket_size=100)
+        _get_embedding_column("product_category", 8, bucket_size=100)
         _get_embedding_column("advertiser_id", 8, bucket_size=100000)
-        _get_embedding_column("industry", 3, bucket_size=5000)
+        _get_embedding_column("industry", 8, bucket_size=5000)
         _get_stat_column("age_stat1", [0.0, 1.0, 2.0, 3.0, 6.0, 10.0, 17.0, 34.0, 63.0, 124.0, 236.0, 581.0, 1272.0])
         _get_stat_column("age_stat2", [0.0, 1.0, 2.0, 3.0, 4.0, 7.0, 11.0, 19.0, 30.0, 53.0, 93.0, 165.0, 286.0, 539.0, 1117.0, 2258.0, 6182.0])
         _get_stat_column("age_stat3", [0.0, 1.0, 2.0, 3.0, 4.0, 7.0, 12.0, 18.0, 29.0, 46.0, 76.0, 134.0, 225.0, 398.0, 664.0, 1432.0, 3414.0, 7531.0])

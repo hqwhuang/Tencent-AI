@@ -10,8 +10,9 @@ import os, sys
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_baseline/1589421800", help="model path")
-parser.add_argument('--last_file', type=int, default=2)
+parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_large/1589626531", help="model path")
+parser.add_argument('--left_file', type=int, default=2)
+parser.add_argument('--right_file', type=int, default=2)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument("--batch_num", type=int, default=100, help="how many batch you want to evaluate")
 parser.add_argument("--target", type=str, default="age", help="target")
@@ -54,7 +55,7 @@ def main(argv):
 
     NOT_EXIST = _Feature("NOT_EXIST")
     model_pred_fn = from_saved_model(args.model_path, 'predict')
-    whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
+    whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(args.left_file,1+args.right_file)]
     accuracy = {}
     for current_feature in [NOT_EXIST] + feature_set:
         ds = tf.data.TFRecordDataset(whole_training_list, "GZIP", 1024)

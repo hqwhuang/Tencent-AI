@@ -3,6 +3,10 @@ import numpy as np
 import collections
 
 
+_INDICES = '_indices'
+_VALUES = '_values'
+_SHAPE = '_shape'
+
 class _Feature(collections.namedtuple("_Feature", [
     'feature_name', 'input_type', 'output_type'
 ])):
@@ -36,8 +40,28 @@ class _Label(_Feature):
         pass
 
 
+class _SequenceFeature(_Feature):
+    
+    def transform_feature(self, read_data):
+        read_data[self.feature_name+_INDICES] = read_data[self.feature_name].indices
+        read_data[self.feature_name+_VALUES] = read_data[self.feature_name].values
+        read_data[self.feature_name+_SHAPE] = tf.shape(read_data[self.feature_name], out_type=tf.int64)
+        read_data.pop(self.feature_name)
+
+
+    def export_feature(self, feature_spec):
+        feature_spec[self.feature_name+_INDICES] = tf.placeholder(self.output_type, shape=(None, 2)) 
+        feature_spec[self.feature_name+_VALUES] = tf.placeholder(self.output_type, shape=(None, )) 
+        feature_spec[self.feature_name+_SHAPE] = tf.placeholder(self.output_type, shape=(2, ))
+    
+
+    def input_feature(self, read_feature):
+        read_feature[self.feature_name] = tf.VarLenFeature(dtype=self.input_type)
+
+
 age = _Label("age")
 gender = _Label("gender")
+rcid = _SequenceFeature("rcid")
 uid = _Feature("user_id")
 time = _Feature("time")
 cid = _Feature("creative_id")
@@ -73,6 +97,7 @@ age_ratio9 = _Feature("age_ratio9", tf.float32, tf.float32)
 age_ratio10 = _Feature("age_ratio10", tf.float32, tf.float32)
 
 feature_set = [
+    rcid,
     uid,
     age,
     gender,
