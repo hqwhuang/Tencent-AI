@@ -11,7 +11,7 @@ import threading
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_sequence1/1589715334", help="model path")
+parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_sequence0.1/1589887406", help="model path")
 parser.add_argument('--left_file', type=int, default=1)
 parser.add_argument('--right_file', type=int, default=24)
 parser.add_argument('--batch_size', type=int, default=128)
@@ -57,9 +57,10 @@ def run(index, args):
     ds = ds.batch(args.batch_size)
     ds = ds.map(parse, num_parallel_calls=10)
     ds = ds.prefetch(1)
-    age_pred, gender_pred, uids = np.array([]), np.array([]), np.array([])
+    age_pred, gender_pred, uids, cids = np.array([]), np.array([]), np.array([]), np.array([])
     for feature_dict, label_tensor in ds:
         uids = np.concatenate((uids, feature_dict['user_id'].numpy()))
+        cids = np.concatenate((cids, feature_dict['creative_id'].numpy()))
         for k in feature_dict:
             if k == 'user_id':
                 feature_dict[k] = tf.reshape(tf.cast(tf.fill(tf.shape(feature_dict[k]), 0), tf.int64), [-1,1]).numpy()
@@ -76,11 +77,11 @@ def run(index, args):
         gender_res = preds_map['gender/class_ids'].flatten()
         age_pred = np.concatenate((age_pred, age_res))
         gender_pred = np.concatenate((gender_pred, gender_res))
-    with open("/cos_person/output/predict/result_{}.txt".format(index), "w") as f:
-        f.write("user_id,predicted_age,predicted_gender\n")
-        result = list(zip(uids, age_pred+1, gender_pred+1))
-        for uid, age, gender in result:
-            f.write("{},{},{}\n".format(int(uid),int(age),int(gender)))
+    with open("/cos_person/output/predict_gender/result_{}.txt".format(index), "w") as f:
+        f.write("user_id,predicted_age,predicted_gender,cid\n")
+        result = list(zip(uids, age_pred+1, gender_pred+1, cids))
+        for uid, age, gender, cid in result:
+            f.write("{},{},{},{}\n".format(int(uid),int(age),int(gender), int(cid)))
 
 
 def main(argv):

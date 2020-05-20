@@ -48,8 +48,9 @@ def run(index, args):
 def gen_tfrecord(argv):
     args = parser.parse_args(argv[1:])
     for i in range(args.left_file, 1+args.right_file):
-        x = threading.Thread(target=run, args=(i, args))
-        x.start()
+        # x = threading.Thread(target=run, args=(i, args))
+        # x.start()
+        run(i, args)
 
 
 if __name__ == '__main__':

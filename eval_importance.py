@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*- 
 import tensorflow as tf
 from tensorflow.contrib.predictor import from_saved_model
-from feature import feature_set, _Feature
+from feature import feature_set, _Feature, _INDICES, _VALUES, _SHAPE
+from feature import *
 import argparse
 import math
 import numpy as np
@@ -10,11 +11,11 @@ import os, sys
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_large/1589626531", help="model path")
-parser.add_argument('--left_file', type=int, default=2)
-parser.add_argument('--right_file', type=int, default=2)
+parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_sequence0.1/1589716454", help="model path")
+parser.add_argument('--left_file', type=int, default=60)
+parser.add_argument('--right_file', type=int, default=60)
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument("--batch_num", type=int, default=100, help="how many batch you want to evaluate")
+parser.add_argument("--batch_num", type=int, default=1000, help="how many batch you want to evaluate")
 parser.add_argument("--target", type=str, default="age", help="target")
 
 
@@ -55,11 +56,16 @@ def main(argv):
 
     NOT_EXIST = _Feature("NOT_EXIST")
     model_pred_fn = from_saved_model(args.model_path, 'predict')
-    whole_training_list = ["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(i) for i in range(args.left_file,1+args.right_file)]
+    whole_training_list = ["/cos_person/training_data_tfrecord_v2/train_tfrecord_{}.gz".format(i) for i in range(args.left_file,1+args.right_file)]
     accuracy = {}
-    for current_feature in [NOT_EXIST] + feature_set:
-        ds = tf.data.TFRecordDataset(whole_training_list, "GZIP", 1024)
+    all_features = [rcid, cid]
+    for current_feature in [NOT_EXIST] + all_features:
+        file_iterator = tf.data.Dataset.list_files(whole_training_list)
+        file_iterator.shuffle(10*1024*1024)
+        ds = file_iterator.interleave(lambda file : tf.data.TFRecordDataset(file, "GZIP", 1024), cycle_length=2, block_length=1)
+        # ds = tf.data.TFRecordDataset(whole_training_list, "GZIP", 1024)
         ds = ds.batch(args.batch_size)
+        # ds = ds.shuffle(10*1024*1024)
         ds = ds.map(parse, num_parallel_calls=10)
         ds = ds.prefetch(1)
         truth, pred, uids = np.array([]), np.array([]), np.array([])
@@ -69,6 +75,14 @@ def main(argv):
             for f in feature_dict:
                 if f == current_feature.feature_name:
                     feature_dict[f] = tf.reshape(tf.random_shuffle(feature_dict[f]), [-1,1]).numpy()
+                elif f == current_feature.feature_name + _VALUES:
+                    feature_dict[f] = tf.reshape(tf.random_shuffle(feature_dict[f]), [-1,]).numpy()
+                elif f.endswith(_VALUES):
+                    feature_dict[f] = tf.reshape(feature_dict[f], [-1,]).numpy()
+                elif f.endswith(_INDICES):
+                    feature_dict[f] = tf.reshape(feature_dict[f], [-1, 2]).numpy()
+                elif f.endswith(_SHAPE):
+                    feature_dict[f] = tf.reshape(feature_dict[f], [-1,]).numpy()
                 else:
                     feature_dict[f] = tf.reshape(feature_dict[f], [-1,1]).numpy()
 

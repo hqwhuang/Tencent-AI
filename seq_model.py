@@ -134,7 +134,7 @@ def main(argv):
             tf.summary.histogram("sample/gender", tf.cast(labels["gender"], tf.int32))
             tf.summary.histogram("sample/age", labels["age"])
         deep_optimizer = tf.train.AdagradOptimizer(learning_rate=0.005)
-        fm_optimizer = tf.train.FtrlOptimizer(learning_rate=args.lr) if args.model_name != "sequencev2" else tf.train.RMSPropOptimizer(learning_rate=0.0001)
+        fm_optimizer = tf.train.FtrlOptimizer(learning_rate=args.lr)
 
         def _train_op_fn(loss):
             train_ops = []
@@ -179,8 +179,8 @@ def main(argv):
                                             combiner=combiner, initializer=tf.random_normal_initializer(stddev=1.0/math.sqrt(dimension)))
 
 
-        _get_shared_sequence_column("rcid", "creative_id", bucket_size=5000000, dimension=CID_EMBEDDING_DIMENSION, combiner="sum")
-        _get_embedding_column("user_id", 8, bucket_size=1000000)
+        _get_shared_sequence_column("rcid", "creative_id", bucket_size=5000000, dimension=CID_EMBEDDING_DIMENSION, combiner="sum" if args.model_name != "sequencev2" else "mean")
+        # _get_embedding_column("user_id", 8, bucket_size=1000000)
         _get_embedding_column("time", 3, bucket_size=7)
         # _get_embedding_column("creative_id", 8, bucket_size=5000000)
         _get_embedding_column("ad_id", 8, bucket_size=4000000)
