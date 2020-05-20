@@ -80,6 +80,7 @@ map<string, vector<int>> tmp;
 vector<int> tmpv;
 set<int> tmps;
 act_log log_list[41000000];
+set<int> train_creative_id;
 int indexx = 1;
 
 void filetotfrecord(int index, bool testing);
@@ -111,6 +112,7 @@ void gen_training_data(bool testing) {
         if (creative_map.find(creative_id) == creative_map.end()) {
             creative_map[creative_id] = creative_profile();
         }
+        train_creative_id.insert(creative_id);
         creative_map[creative_id].add_ad_ids(ad_id);
         creative_map[creative_id].add_product_id(product_id);
         creative_map[creative_id].add_product_category(product_category);
@@ -204,6 +206,12 @@ void gen_testing_data() {
             creative_map[creative_id].add_product_category(product_category);
             creative_map[creative_id].add_advertiser_id(advertiser_id);
             creative_map[creative_id].add_industry(industry);
+            for (int i = 0; i < AGE_NUM; i++) {
+                creative_map[creative_id].age_stat[i] = 60;
+            }
+            for (int i = 0; i < GENDER_NUM; i++) {
+                creative_map[creative_id].gender_stat[i] = 60;
+            }
         }
     }
     //calculate for stat feature
@@ -220,8 +228,9 @@ void gen_testing_data() {
         if (user_map.find(user_id) == user_map.end()) {
             user_map.insert({user_id, {0, 0, tmpv, tmps}});
         }
-//        user_map[user_id].creative_ids.pb(creative_id);
-        user_map[user_id].add_creative_id(creative_id);
+        if (train_creative_id.find(creative_id) != train_creative_id.end())
+            user_map[user_id].add_creative_id(creative_id);
+//            user_map[user_id].creative_ids.pb(creative_id);
         log_list[count] = {time, user_id, creative_id, click_times};
 
         count++;
@@ -382,21 +391,22 @@ void gen_result() {
     cout<<endl;
     for(int i = 1; i < 136; i++) {
         cout<<"*"<<std::flush;
-        ifstream input_gender("/Users/huangqingwei/Documents/cos/predict_gender/result_" + to_string(i) + ".txt");
-        getline(input_gender, line);
-        while(getline(input_gender, line)) {
+        ifstream input("/Users/huangqingwei/Documents/comp/tencentAD/predict_gender/result_" + to_string(i) + ".txt");
+        getline(input, line);
+        while(getline(input, line)) {
             sscanf(line.c_str(), "%d,%d,%d", &uid, &age, &gender);
+//            user_age[uid][age]++;
             user_gender[uid][gender]++;
+        }
+
+        ifstream input_age("/Users/huangqingwei/Documents/comp/tencentAD/predict_age/result_" + to_string(i) + ".txt");
+        getline(input_age, line);
+        while(getline(input_age, line)) {
+            sscanf(line.c_str(), "%d,%d,%d", &uid, &age, &gender);
             user_age[uid][age]++;
         }
-        // ifstream input_age("/Users/huangqingwei/Documents/cos/predict_age/result_" + to_string(i) + ".txt");
-        // getline(input_age, line);
-        // while(getline(input_age, line)) {
-        //     sscanf(line.c_str(), "%d,%d,%d", &uid, &age, &gender);
-        //     user_age[uid][age]++;
-        // }
     }
-    ofstream output("/Users/huangqingwei/Documents/cos/submission.csv");
+    ofstream output("/Users/huangqingwei/Documents/comp/tencentAD/submission.csv");
     output<<"user_id,predicted_age,predicted_gender"<<'\n';
     for (auto v : user_age) {
         output<<v.first<<','<<get_most(user_age[v.first])<<','<<get_most(user_gender[v.first])<<'\n';
@@ -404,6 +414,85 @@ void gen_result() {
     output.close();
 }
 
+map<int, map<int,int>> user_age_back;
+map<int, map<int,int>> user_gender_back;
+
+void gen_result_v2() {
+    string line;
+    int uid;
+    int age;
+    int gender;
+    int cid;
+    for(int i = 1; i < 136; i++)
+        cout<<"*";
+    cout<<endl;
+    for(int i = 1; i < 136; i++) {
+        cout<<"*"<<std::flush;
+        ifstream input("/Users/huangqingwei/Documents/comp/tencentAD/predict_gender/result_" + to_string(i) + ".txt");
+        getline(input, line);
+        while(getline(input, line)) {
+            sscanf(line.c_str(), "%d,%d,%d,%d", &uid, &age, &gender, &cid);
+//            user_age[uid][age]++;
+            if (train_creative_id.find(cid) != train_creative_id.end())
+                user_gender[uid][gender]++;
+            else
+                user_gender_back[uid][gender]++;
+        }
+
+        ifstream input_age("/Users/huangqingwei/Documents/comp/tencentAD/predict_age/result_" + to_string(i) + ".txt");
+        getline(input_age, line);
+        while(getline(input_age, line)) {
+            sscanf(line.c_str(), "%d,%d,%d,%d", &uid, &age, &gender, &cid);
+            if (train_creative_id.find(cid) != train_creative_id.end())
+                user_age[uid][age]++;
+            else
+                user_age_back[uid][gender]++;
+        }
+    }
+    ofstream output("/Users/huangqingwei/Documents/comp/tencentAD/submission.csv");
+    output<<"user_id,predicted_age,predicted_gender"<<'\n';
+    for (auto v : user_age) {
+        output<<v.first<<','<<get_most(user_age[v.first])<<','<<get_most(user_gender[v.first])<<'\n';
+    }
+    for (auto v : user_age_back) {
+        if (user_age.find(v.first) == user_age.end()) {
+            output<<v.first<<','<<get_most(user_age_back[v.first])<<','<<get_most(user_gender_back[v.first])<<'\n';
+        }
+    }
+    output.close();
+}
+
+set<int> creative_ids[2];
+set<int> cid_log[2];
+void check() {
+    ifstream test("/Users/huangqingwei/Documents/C++ workspace/codeforces/test/adz.csv");
+    ifstream test_log("/Users/huangqingwei/Documents/C++ workspace/codeforces/test/click_log.csv");
+    ifstream train("/Users/huangqingwei/Documents/C++ workspace/codeforces/train_preliminary/adz.csv");
+    ifstream train_log("/Users/huangqingwei/Documents/C++ workspace/codeforces/train_preliminary/click_log.csv");
+
+    string line;
+    getline(test, line);
+    getline(test_log, line);
+    getline(train, line);
+    getline(train_log, line);
+
+    int creative_id, ad_id, product_id, product_category, advertiser_id, industry;
+    while(getline(test, line)) {
+        sscanf(line.c_str(), "%d,%d,%d,%d,%d,%d", &creative_id, &ad_id, &product_id, &product_category, &advertiser_id, &industry);
+        creative_ids[1].insert(creative_id);
+    }
+    int time, user_id, click_times;
+    while(getline(test_log, line)) {
+        sscanf(line.c_str(), "%d,%d,%d,%d", &time, &user_id, &creative_id, &click_times);
+        cid_log[1].insert(creative_id);
+    }
+    int result = 0;
+    for(auto v : cid_log[1]) {
+        if (creative_ids[1].find(v) == creative_ids[1].end())
+            result++;
+    }
+    cout<<result<<endl;
+}
 
 int main() {
     ios::sync_with_stdio(false);cout.setf(ios::fixed);cout.precision(20);
@@ -419,7 +508,10 @@ int main() {
 //    gen_training_data(true/*testing*/);
 //    gen_testing_data();
     /*result*/
-    gen_result();
+//    gen_result();
+    /*resultv2*/
+    gen_training_data(true/*testing*/);
+    gen_result_v2();
 
 #ifdef LOCAL
     cerr << "Time elapsed: " << 1.0 * clock() / CLOCKS_PER_SEC << " s.\n";

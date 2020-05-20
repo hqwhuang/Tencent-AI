@@ -13,17 +13,17 @@ import os, sys, subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--epoch', type=int, default=1)
+parser.add_argument('--epoch', type=int, default=24)
 parser.add_argument('--model_name', type=str, default="sequence")
 parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/model_")
 parser.add_argument('--save_dir', type=str, default="/cos_person/training_output/save_")
-parser.add_argument('--per_file', type=int, default=12)
+parser.add_argument('--per_file', type=int, default=48)
 parser.add_argument('--last_file', type=int, default=2) #121
 parser.add_argument("--hidden_layers", type=str, default="128,64")
 parser.add_argument("--lr", type=float, default=0.1)
 
 TEMP = "temp/"
-CID_EMBEDDING_DIMENSION = 8
+CID_EMBEDDING_DIMENSION = 128
 
 
 class Unbuffered(object):
@@ -106,7 +106,7 @@ def main(argv):
             feature_weight = []
             for feature in feature_columns:
                 feature_weight.append(tf.feature_column.input_layer(features, params['feature_columns'][feature]))
-            net = tf.concat(feature_weight, axis=1, name="deep_input_layer")
+            net = tf.concat(feature_weight + [rcid_up, cid_up], axis=1, name="deep_input_layer")
             tf.logging.info("deep input shape={}".format(net.shape))
             tf.summary.histogram('input', net)
             cnt = 0
@@ -179,7 +179,7 @@ def main(argv):
                                             combiner=combiner, initializer=tf.random_normal_initializer(stddev=1.0/math.sqrt(dimension)))
 
 
-        _get_shared_sequence_column("rcid", "creative_id", bucket_size=5000000, dimension=CID_EMBEDDING_DIMENSION, combiner="sum" if args.model_name != "sequencev2" else "mean")
+        _get_shared_sequence_column("rcid", "creative_id", bucket_size=5000000, dimension=CID_EMBEDDING_DIMENSION, combiner="sum" if args.model_name != "sequencev2" else "sqrtn")
         # _get_embedding_column("user_id", 8, bucket_size=1000000)
         _get_embedding_column("time", 3, bucket_size=7)
         # _get_embedding_column("creative_id", 8, bucket_size=5000000)
