@@ -6,24 +6,36 @@ from tensorflow.python.training.summary_io import SummaryWriterCache
 from tensorflow.feature_column import numeric_column, embedding_column, shared_embedding_columns, indicator_column, bucketized_column
 from tensorflow.contrib.layers import sparse_column_with_integerized_feature, \
                                       sparse_column_with_hash_bucket
-from feature import feature_set
+from feature import feature_set, feature_set_v2, feature_set_v3
 import argparse
 import math
 import os, sys, subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--epoch', type=int, default=24)
+parser.add_argument('--epoch', type=int, default=1)
 parser.add_argument('--model_name', type=str, default="sequence")
 parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/model_")
 parser.add_argument('--save_dir', type=str, default="/cos_person/training_output/save_")
 parser.add_argument('--per_file', type=int, default=48)
 parser.add_argument('--last_file', type=int, default=2) #121
 parser.add_argument("--hidden_layers", type=str, default="128,64")
-parser.add_argument("--lr", type=float, default=0.1)
+parser.add_argument("--debug_mode", action="store_true", default=False)
+
 
 TEMP = "temp/"
-CID_EMBEDDING_DIMENSION = 128
+CID_EMBEDDING_DIMENSION = 64
+combiner_map = {
+    "sequencev1": "mean",
+    "sequencev2": "mean",
+    "sequencev3": "mean"
+}
+
+feature_set_map = {
+    "sequencev1": feature_set,
+    "sequencev2": feature_set_v2,
+    "sequencev3": feature_set_v3
+}
 
 
 class Unbuffered(object):
@@ -45,14 +57,14 @@ def main(argv):
         "gender": 0.5
     }
     read_feature = {}
-    for f in feature_set:
+    for f in feature_set_map[args.model_name]:
         f.input_feature(read_feature)
 
 
     def parse(record):
         read_data = tf.parse_example(serialized=record,
                                     features=read_feature)
-        for f in feature_set:
+        for f in feature_set_map[args.model_name]:
             f.transform_feature(read_data)
         
         labels = {
@@ -112,7 +124,7 @@ def main(argv):
             cnt = 0
             layer_name = "dense"
             for units in params['hidden_layers']:
-                net = tf.layers.dense(net, units=units, activation=tf.nn.relu)
+                net = tf.layers.dense(net, units=units, activation=tf.nn.relu, kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.01))
                 with tf.variable_scope(layer_name, reuse=True):
                     weights = tf.get_variable("kernel")
                     bias = tf.get_variable("bias")
@@ -134,12 +146,13 @@ def main(argv):
             tf.summary.histogram("sample/gender", tf.cast(labels["gender"], tf.int32))
             tf.summary.histogram("sample/age", labels["age"])
         deep_optimizer = tf.train.AdagradOptimizer(learning_rate=0.005)
-        fm_optimizer = tf.train.FtrlOptimizer(learning_rate=args.lr)
+        fm_optimizer = tf.train.FtrlOptimizer(learning_rate=0.1)
 
         def _train_op_fn(loss):
             train_ops = []
+            l2_loss = tf.losses.get_regularization_loss()
             tf.summary.scalar('loss', loss)
-            train_ops.append(deep_optimizer.minimize(loss=loss, 
+            train_ops.append(deep_optimizer.minimize(loss=loss + l2_loss, 
                                                     global_step=tf.train.get_global_step(),
                                                     var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="deep")))
             train_ops.append(fm_optimizer.minimize(loss=loss, 
@@ -179,7 +192,7 @@ def main(argv):
                                             combiner=combiner, initializer=tf.random_normal_initializer(stddev=1.0/math.sqrt(dimension)))
 
 
-        _get_shared_sequence_column("rcid", "creative_id", bucket_size=5000000, dimension=CID_EMBEDDING_DIMENSION, combiner="sum" if args.model_name != "sequencev2" else "sqrtn")
+        _get_shared_sequence_column("rcid", "creative_id", bucket_size=5000000, dimension=CID_EMBEDDING_DIMENSION, combiner=combiner_map[args.model_name])
         # _get_embedding_column("user_id", 8, bucket_size=1000000)
         _get_embedding_column("time", 3, bucket_size=7)
         # _get_embedding_column("creative_id", 8, bucket_size=5000000)
@@ -216,7 +229,7 @@ def main(argv):
 
         classifier = tf.estimator.Estimator(
             model_fn=model_fn,
-            model_dir=TEMP+args.model_name,
+            model_dir=TEMP+args.model_name if not args.debug_mode else args.model_dir+args.model_name,
             params={
                 'feature_columns': feature_columns,
                 'sequence_feature_columns': sequence_feature_columns,
@@ -229,20 +242,25 @@ def main(argv):
 
     feature_spec = {}
 
-    for f in feature_set:
+    for f in feature_set_map[args.model_name]:
         f.export_feature(feature_spec)
 
     classifier = get_classifier()
+    if args.debug_mode:
+        # print(classifier.get_variable_names())
+        print(classifier.get_variable_value('fm/input_layer/creative_id_rcid_shared_embedding/embedding_weights').mean())
+        return
 
     whole_training_list = ["/cos_person/training_data_tfrecord_v2/train_tfrecord_{}.gz".format(i) for i in range(1,1+args.last_file)]
+    last_file = [whole_training_list.pop()]
+    
     training_list_list = []
     for i in range(0, len(whole_training_list), args.per_file):
         training_list_list.append(whole_training_list[i:i+args.per_file])
 
-    last_file = []
     for file_list_index, filenames in enumerate(training_list_list):
-        filenames = last_file + filenames
-        last_file = [filenames.pop()]
+        # filenames = last_file + filenames
+        # last_file = [filenames.pop()]
         tf.logging.info('Training file: {}'.format(filenames))
 
         classifier.train(
@@ -261,7 +279,7 @@ def main(argv):
                 batch_size=128
             ),
             name=args.model_name,
-            steps=100,
+            steps=1000,
             hooks=[]
         )
     if len(last_file) != 0:

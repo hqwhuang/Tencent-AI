@@ -8,15 +8,17 @@ _VALUES = '_values'
 _SHAPE = '_shape'
 
 class _Feature(collections.namedtuple("_Feature", [
-    'feature_name', 'input_type', 'output_type'
+    'feature_name', 'sequence_len', 'input_type', 'output_type'
 ])):
     def __new__(cls,
                 feature_name,
+                sequence_len=60,
                 input_type=tf.int64,
                 output_type=tf.int64):
         return super(_Feature, cls).__new__(
             cls,
             feature_name,
+            sequence_len,
             input_type,
             output_type
         )
@@ -43,9 +45,14 @@ class _Label(_Feature):
 class _SequenceFeature(_Feature):
     
     def transform_feature(self, read_data):
-        read_data[self.feature_name+_INDICES] = read_data[self.feature_name].indices
-        read_data[self.feature_name+_VALUES] = read_data[self.feature_name].values
-        read_data[self.feature_name+_SHAPE] = tf.shape(read_data[self.feature_name], out_type=tf.int64)
+        dense_tensor = tf.sparse_to_dense(read_data[self.feature_name].indices, 
+                                          tf.shape(read_data[self.feature_name], out_type=tf.int64), 
+                                          read_data[self.feature_name].values,
+                                          default_value=0)
+        slice_tensor = dense_tensor[:, 0:self.sequence_len]
+        read_data[self.feature_name+_INDICES] = tf.where(tf.not_equal(slice_tensor, 0))
+        read_data[self.feature_name+_VALUES] = tf.gather_nd(slice_tensor, read_data[self.feature_name+_INDICES])
+        read_data[self.feature_name+_SHAPE] = tf.shape(slice_tensor, out_type=tf.int64)
         read_data.pop(self.feature_name)
 
 
@@ -62,6 +69,9 @@ class _SequenceFeature(_Feature):
 age = _Label("age")
 gender = _Label("gender")
 rcid = _SequenceFeature("rcid")
+rcid_20 = _SequenceFeature("rcid", sequence_len=20)
+rcid_5 = _SequenceFeature("rcid", sequence_len=5)
+rcid_second_phase = _SequenceFeature("creative_ids", sequence_len=100000)
 uid = _Feature("user_id")
 time = _Feature("time")
 cid = _Feature("creative_id")
@@ -134,3 +144,88 @@ feature_set = [
     gender_stat2,
     pv
     ]
+
+feature_set_v2 = [
+    rcid_20,
+    uid,
+    age,
+    gender,
+    time,
+    cid,
+    aid,
+    product_id,
+    product_category,
+    advertiser_id,
+    industry,
+    age_ratio1,
+    age_ratio2,
+    age_ratio3,
+    age_ratio4,
+    age_ratio5,
+    age_ratio6,
+    age_ratio7,
+    age_ratio8,
+    age_ratio9,
+    age_ratio10,
+    age_stat1,
+    age_stat2,
+    age_stat3,
+    age_stat4,
+    age_stat5,
+    age_stat6,
+    age_stat7,
+    age_stat8,
+    age_stat9,
+    age_stat10,
+    gender_ratio1,
+    gender_ratio2,
+    gender_stat1,
+    gender_stat2,
+    pv
+    ]
+
+feature_set_v3 = [
+    rcid_5,
+    uid,
+    age,
+    gender,
+    time,
+    cid,
+    aid,
+    product_id,
+    product_category,
+    advertiser_id,
+    industry,
+    age_ratio1,
+    age_ratio2,
+    age_ratio3,
+    age_ratio4,
+    age_ratio5,
+    age_ratio6,
+    age_ratio7,
+    age_ratio8,
+    age_ratio9,
+    age_ratio10,
+    age_stat1,
+    age_stat2,
+    age_stat3,
+    age_stat4,
+    age_stat5,
+    age_stat6,
+    age_stat7,
+    age_stat8,
+    age_stat9,
+    age_stat10,
+    gender_ratio1,
+    gender_ratio2,
+    gender_stat1,
+    gender_stat2,
+    pv
+    ]
+
+feature_set_second_phase = [
+    age,
+    gender,
+    uid,
+    rcid_second_phase
+]
