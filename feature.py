@@ -107,7 +107,7 @@ age_ratio9 = _Feature("age_ratio9", tf.float32, tf.float32)
 age_ratio10 = _Feature("age_ratio10", tf.float32, tf.float32)
 
 feature_set = [
-    rcid,
+    rcid_5,
     uid,
     age,
     gender,
@@ -146,7 +146,7 @@ feature_set = [
     ]
 
 feature_set_v2 = [
-    rcid_20,
+    rcid_5,
     uid,
     age,
     gender,

@@ -37,6 +37,12 @@ feature_set_map = {
     "sequencev3": feature_set_v3
 }
 
+lr_map = {
+    "sequencev1": 0.01,
+    "sequencev2": 0.001,
+    "sequencev3": 0.0001
+}
+
 
 class Unbuffered(object):
     def __init__(self, stream):
@@ -146,7 +152,8 @@ def main(argv):
             tf.summary.histogram("sample/gender", tf.cast(labels["gender"], tf.int32))
             tf.summary.histogram("sample/age", labels["age"])
         deep_optimizer = tf.train.AdagradOptimizer(learning_rate=0.005)
-        fm_optimizer = tf.train.FtrlOptimizer(learning_rate=0.1)
+        # fm_optimizer = tf.train.FtrlOptimizer(learning_rate=0.1)
+        fm_optimizer = tf.train.RMSPropOptimizer(learning_rate=lr_map[args.model_name])
 
         def _train_op_fn(loss):
             train_ops = []
