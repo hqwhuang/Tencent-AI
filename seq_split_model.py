@@ -15,8 +15,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--epoch', type=int, default=1)
 parser.add_argument('--model_name', type=str, default="sequence")
-parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/model_")
-parser.add_argument('--save_dir', type=str, default="/cos_person/training_output/save_")
+parser.add_argument('--target', type=str, default="gender", help="age")
+parser.add_argument('--model_dir', type=str, default="/cos_person/training_output/model_split")
+parser.add_argument('--save_dir', type=str, default="/cos_person/training_output/save_split")
 parser.add_argument('--per_file', type=int, default=48)
 parser.add_argument('--last_file', type=int, default=2) #121
 parser.add_argument("--hidden_layers", type=str, default="128,64")
@@ -35,12 +36,6 @@ feature_set_map = {
     "sequencev1": feature_set,
     "sequencev2": feature_set_v2,
     "sequencev3": feature_set_v3
-}
-
-lr_map = {
-    "sequencev1": 0.01,
-    "sequencev2": 0.001,
-    "sequencev3": 0.0001
 }
 
 
@@ -81,7 +76,7 @@ def main(argv):
         read_data["gender_weight"] = tf.fill(tf.shape(read_data["gender"]), 1.0)
         read_data.pop("gender")
         read_data.pop("age")
-        return read_data, labels
+        return read_data, labels[args.target]
 
 
     def get_input_fn(filenames, epoch=1, batch_size=128, compression="GZIP"):
@@ -97,10 +92,7 @@ def main(argv):
     def model_fn(features, labels, mode, params):
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
         weight_columns = {x: numeric_column(x+"_weight") for x in label_weights.keys()}
-        head = tf.contrib.estimator.multi_head([
-            tf.contrib.estimator.multi_class_head(n_classes=10, name="age"),
-            tf.contrib.estimator.binary_classification_head(name="gender")
-        ])
+        head = tf.contrib.estimator.multi_class_head(n_classes=10, name="age") if args.target == "age" else tf.contrib.estimator.binary_classification_head(name="gender")
         temp = {'creative_id': features['creative_id']}
         temp['rcid'] = tf.sparse.SparseTensor(features['rcid_indices'], features['rcid_values'], features['rcid_shape'])
 
@@ -149,11 +141,8 @@ def main(argv):
         if is_training:
             tf.summary.histogram("fm_output/rcid_cid_cross", rcid_cid_cross)
             tf.summary.histogram("fm_output/linear_bias", rcid_bias + cid_bias)
-            tf.summary.histogram("sample/gender", tf.cast(labels["gender"], tf.int32))
-            tf.summary.histogram("sample/age", labels["age"])
         deep_optimizer = tf.train.AdagradOptimizer(learning_rate=0.005)
         fm_optimizer = tf.train.FtrlOptimizer(learning_rate=0.1)
-        # fm_optimizer = tf.train.RMSPropOptimizer(learning_rate=lr_map[args.model_name])
 
         def _train_op_fn(loss):
             train_ops = []
@@ -236,7 +225,7 @@ def main(argv):
 
         classifier = tf.estimator.Estimator(
             model_fn=model_fn,
-            model_dir=TEMP+args.model_name if not args.debug_mode else args.model_dir+args.model_name,
+            model_dir=TEMP+args.model_name if not args.debug_mode else args.model_dir+args.model_name+"_"+args.target,
             params={
                 'feature_columns': feature_columns,
                 'sequence_feature_columns': sequence_feature_columns,
@@ -285,7 +274,7 @@ def main(argv):
                 epoch=1,
                 batch_size=128
             ),
-            name=args.model_name,
+            name=args.model_name+"_"+args.target,
             steps=1000,
             hooks=[]
         )
@@ -302,7 +291,7 @@ def main(argv):
     tf.logging.info("Finish train and evaluate")
     classifier.export_saved_model(args.save_dir+args.model_name, tf.estimator.export.build_raw_serving_input_receiver_fn(features=feature_spec))
     tf.logging.info("Finish export model")
-    out_bytes = subprocess.check_output(['cp', '-r', TEMP+args.model_name, args.model_dir+args.model_name])
+    out_bytes = subprocess.check_output(['cp', '-r', TEMP+args.model_name, args.model_dir+args.model_name+"_"+args.target])
     tf.logging.info("Finish copy model_dir")
 
 

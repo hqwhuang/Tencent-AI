@@ -69,8 +69,9 @@ class _SequenceFeature(_Feature):
 age = _Label("age")
 gender = _Label("gender")
 rcid = _SequenceFeature("rcid")
-rcid_20 = _SequenceFeature("rcid", sequence_len=20)
+rcid_1 = _SequenceFeature("rcid", sequence_len=1)
 rcid_5 = _SequenceFeature("rcid", sequence_len=5)
+rcid_10 = _SequenceFeature("rcid", sequence_len=2)
 rcid_second_phase = _SequenceFeature("creative_ids", sequence_len=100000)
 uid = _Feature("user_id")
 time = _Feature("time")
@@ -107,7 +108,7 @@ age_ratio9 = _Feature("age_ratio9", tf.float32, tf.float32)
 age_ratio10 = _Feature("age_ratio10", tf.float32, tf.float32)
 
 feature_set = [
-    rcid_5,
+    rcid_1,
     uid,
     age,
     gender,
@@ -185,7 +186,7 @@ feature_set_v2 = [
     ]
 
 feature_set_v3 = [
-    rcid_5,
+    rcid_10,
     uid,
     age,
     gender,
