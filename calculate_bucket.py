@@ -34,11 +34,11 @@ def gen_tfrecord(argv):
 
     def _parse(record):
         read_features = {
-            f: tf.FixedLenFeature([], dtype=tf.int64) for f in features_int64 #VarLenFeature
+            f: tf.FixedLenFeature([], dtype=tf.int64) for f in features_int64 + features_float #VarLenFeature
         }
-        read_features.update({
-            f: tf.FixedLenFeature([], dtype=tf.float32) for f in features_float
-        })
+        # read_features.update({
+        #     f: tf.FixedLenFeature([], dtype=tf.float32) for f in features_float
+        # })
         read_data = tf.parse_example(serialized=record,
                                     features=read_features)
         return read_data
@@ -48,8 +48,8 @@ def gen_tfrecord(argv):
     result = {
         f: [] for f in features
     }
-    for j in range(66,67):
-        ds = tf.data.TFRecordDataset(["/cos_person/training_data_tfrecord/train_tfrecord_{}.gz".format(j)], 'GZIP', 1024*1024*1024)
+    for j in range(1,121):
+        ds = tf.data.TFRecordDataset(["/cos_person/training_data_tfrecord_v2/train_tfrecord_{}.gz".format(j)], 'GZIP', 1024*1024*1024)
         ds = ds.batch(128)
         ds = ds.map(_parse)
         

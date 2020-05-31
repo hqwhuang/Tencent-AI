@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*- 
 import tensorflow as tf
 from tensorflow.contrib.predictor import from_saved_model
-from feature import feature_set, _INDICES, _VALUES, _SHAPE
+from feature import feature_set_v3, _INDICES, _VALUES, _SHAPE
 import argparse
 import math
 import numpy as np
@@ -11,7 +11,7 @@ import threading
 tf.enable_eager_execution()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_path", type=str, default="/cos_person/training_output_second_phase/save_sequencev3/1590515578", help="model path")
+parser.add_argument("--model_path", type=str, default="/cos_person/training_output/save_sequencev3/1590897715", help="model path")
 parser.add_argument('--left_file', type=int, default=1)
 parser.add_argument('--right_file', type=int, default=24)
 parser.add_argument('--batch_size', type=int, default=128)
@@ -31,14 +31,14 @@ sys.stdout = Unbuffered(sys.stdout)
 
 def run(index, args):
     read_feature = {}
-    for f in feature_set:
+    for f in feature_set_v3:
         f.input_feature(read_feature)
 
 
     def parse(record):
         read_data = tf.parse_example(serialized=record,
                                     features=read_feature)
-        for f in feature_set:
+        for f in feature_set_v3:
             f.transform_feature(read_data)
         
         labels = {
