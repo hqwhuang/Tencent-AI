@@ -12,7 +12,7 @@ class _Feature(collections.namedtuple("_Feature", [
 ])):
     def __new__(cls,
                 feature_name,
-                sequence_len=20,
+                sequence_len=1000,
                 input_type=tf.int64,
                 output_type=tf.int64):
         return super(_Feature, cls).__new__(
@@ -68,10 +68,11 @@ class _SequenceFeature(_Feature):
 
 age = _Label("age")
 gender = _Label("gender")
+index = _Label("i")
 rcid = _SequenceFeature("rcid")
 rcid_5 = _SequenceFeature("rcid", sequence_len=5)
-rcid_10 = _SequenceFeature("rcid", sequence_len=10)
-rcid_20 = _SequenceFeature("rcid", sequence_len=20)
+rcid_6 = _SequenceFeature("rcid", sequence_len=6)
+rcid_7 = _SequenceFeature("rcid", sequence_len=7)
 uid = _Feature("user_id")
 time = _Feature("time")
 cid = _Feature("creative_id")
@@ -146,7 +147,7 @@ feature_set = [
     ]
 
 feature_set_v2 = [
-    rcid_10,
+    rcid_6,
     uid,
     age,
     gender,
@@ -185,7 +186,7 @@ feature_set_v2 = [
     ]
 
 feature_set_v3 = [
-    rcid_20,
+    rcid_7,
     uid,
     age,
     gender,
@@ -222,3 +223,64 @@ feature_set_v3 = [
     gender_stat2,
     pv
     ]
+
+feature_set_tot = [
+    rcid,
+    uid,
+    age,
+    gender,
+    time,
+    cid,
+    aid,
+    product_id,
+    product_category,
+    advertiser_id,
+    industry,
+    age_ratio1,
+    age_ratio2,
+    age_ratio3,
+    age_ratio4,
+    age_ratio5,
+    age_ratio6,
+    age_ratio7,
+    age_ratio8,
+    age_ratio9,
+    age_ratio10,
+    age_stat1,
+    age_stat2,
+    age_stat3,
+    age_stat4,
+    age_stat5,
+    age_stat6,
+    age_stat7,
+    age_stat8,
+    age_stat9,
+    age_stat10,
+    gender_ratio1,
+    gender_ratio2,
+    gender_stat1,
+    gender_stat2,
+    pv
+    ]
+
+fm_set_v1 = [
+    rcid_5,
+    cid,
+    gender,
+    index
+]
+
+fm_set_v2 = [
+    rcid_6,
+    cid,
+    gender,
+    index
+]
+
+fm_set_v3 = [
+    rcid_7,
+    cid,
+    gender,
+    index
+]
+
